@@ -24,59 +24,71 @@
 #include <stdio.h>
 #include "floatChain.h"
 
-/* Creates a new chain */
-Chain* newChain(float f_inp)
+/* Creates a new chained list */
+CircularQueue* initCircularQueue( unsigned int i_size )
 {
-    Chain* p_this = malloc( sizeof( Chain ));
-    if ( p_this )
-        p_this->f_value = f_inp;
+    CircularQueue* p_this = malloc( sizeof(CircularQueue) );
+    if( p_this )
+    {
+        p_this->p_array = malloc( (i_size + 5) * sizeof(float) );
+        if ( !p_this->p_array )
+            return NULL;
+
+        p_this->i_size = i_size;
+
+        p_this->p_head = p_this->p_array;
+        p_this->p_tail = p_this->p_array;
+    }
     return p_this;
 }
-/* Creates a new chained list */
-Chain* initFloatChain()
-{
-    Chain* p_head = newChain( 0.f );
-    if ( p_head )
-        vlc_list_init( &p_head->p_nodes );
-    return p_head;
-}
+
 /* Destroyer */
-void destroyFloatChain( Chain* p_head )
+void destroyCircularQueue( CircularQueue* p_this )
 {
-    while( !vlc_list_is_empty( &p_head->p_nodes ) )
-        specificDeleter( vlc_list_entry( p_head->p_nodes.next, Chain, p_nodes ) );
-
-    free(p_head);
+    free( p_this->p_array );
+    free( p_this );
 }
 
-void push( Chain* p_head, float i_inp )
+void resizeCircularQueue( CircularQueue* p_this, unsigned int i_nuSize )
 {
-    Chain* p_nuChain = newChain(i_inp);
-    vlc_list_prepend( &p_nuChain->p_nodes, &p_head->p_nodes );
+    float* p_nuQueue = malloc( sizeof(float) * i_nuSize);
+    if ( p_nuQueue )
+    {
+        if ( p_this->i_size < i_nuSize)
+            memcpy( p_nuQueue, p_this->p_array, ( p_this->i_size ) * sizeof(float) );
+        else
+            memcpy( p_nuQueue, p_this->p_array, ( i_nuSize ) * sizeof(float) );
+
+        free( p_this->p_array );
+
+        p_this->p_array = p_nuQueue;
+        p_this->p_head = p_nuQueue;
+        p_this->p_tail = p_nuQueue;
+        p_this->i_size = i_nuSize;
+    }
+    else
+    {
+        // ON TROUE UN MOYEM ELEGANT DE FAIRE UNE ERREUR
+    }
 }
 
-void pushBack( Chain* p_head, float i_inp )
+void push( CircularQueue* p_this, float i_inp )
 {
-    Chain* p_nuChain = newChain(i_inp);
-    vlc_list_append( &p_nuChain->p_nodes, &p_head->p_nodes );
+    *p_this->p_head = i_inp;
+
+    if( p_this->p_head == (p_this->p_array + ( p_this->i_size - 1 ) ) )
+        p_this->p_head = p_this->p_array;
+    else
+        p_this->p_head++;
 }
 
-float specificDeleter( Chain* p_toRemove )
+float pop( CircularQueue* p_this )
 {
-    float f_ret = p_toRemove->f_value;
-    vlc_list_remove( &p_toRemove->p_nodes );
-    free( p_toRemove );
-    p_toRemove = NULL;
-    return f_ret;
-}
+    float f_temp = *p_this->p_tail;
+    if( p_this->p_tail == (p_this->p_array + ( p_this->i_size - 1 ) ) )
+        p_this->p_tail = p_this->p_array;
+    else
+        p_this->p_tail++;
 
-float pop( Chain* p_head )
-{
-    struct vlc_list* p_toRemove = p_head->p_nodes.next;
-    return specificDeleter( vlc_list_entry( p_toRemove, struct Chain, p_nodes ) );
-}
-
-float popBack( Chain* p_head  )
-{
-    return specificDeleter( vlc_list_entry( p_head->p_nodes.prev, struct Chain, p_nodes ) );
+    return f_temp;
 }

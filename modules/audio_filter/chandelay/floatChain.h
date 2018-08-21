@@ -23,22 +23,20 @@
 #ifndef FLOAT_CHAIN_H
 #define FLOAT_CHAIN_H 1
 
-#include <vlc_list.h>
 #include <vlc_es.h>
 
-typedef struct Chain
+typedef struct CircularQueue
 {
-    float f_value;
-    struct vlc_list p_nodes;
-} Chain;
+    unsigned int i_size;
+    float* p_head;
+    float* p_tail;
+    float* p_array;
+} CircularQueue;
 
-Chain* initFloatChain( void ); 
-void destroyFloatChain( Chain* );
-Chain* newChain( float );
-void push( Chain*, float );
-void pushBack( Chain* , float );
-float specificDeleter( Chain* );
-float pop( Chain* );
-float popBack( Chain* );
+CircularQueue* initCircularQueue( unsigned int );
+void destroyCircularQueue( CircularQueue* );
+void resizeCircularQueue( CircularQueue*, unsigned int );
+void push( CircularQueue*, float );
+float pop( CircularQueue* );
 
 #endif

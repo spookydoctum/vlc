@@ -54,7 +54,7 @@ typedef struct
     unsigned int i_nbChannel;
     int i_sampleRate;
     float* p_delayValues; /*the time we need to delay*/
-    Chain** pp_stack; /* Where we keep the delayed values*/
+    CircularQueue** pp_stack; /* Where we keep the delayed values*/
     vlc_mutex_t* p_lock; /*Mutex for the callbacks*/
 } filter_sys_t;
 
@@ -138,6 +138,10 @@ static void addNullSamples( filter_t* p_this, int i_nbChannel, int nbSamp )
 static void updateChannelBuf( filter_t* p_delay, int i_channelACT, float diffVal )
 {
     filter_sys_t* p_sys = p_delay->p_sys;
+    resizeCircularQueue( p_sys->pp_stack[i_channelACT]
+                         , p_sys->pp_stack[i_channelACT]->i_size 
+                           + milisecToNbSamp(diffVal, p_sys->i_sampleRate) );
+
     if ( diffVal > 0 ) /* If the value increased */
     {
         addNullSamples( p_delay /* We add silence */
@@ -314,6 +318,8 @@ static int updateTemp( vlc_object_t *p_this
     return VLC_SUCCESS;
 }
 
+//lol
+
 /* If we switched to a fahrenheit temperature */
 static int updateFah( vlc_object_t *p_this
                       , char const *psz_var
@@ -374,7 +380,7 @@ static int Open ( vlc_object_t * p_this )
     }
 
     /*Init Sample Buffer Initialisation*/
-    p_sys->pp_stack = malloc( NB_CALLBACKS * sizeof(Chain) );
+    p_sys->pp_stack = malloc( NB_CALLBACKS * sizeof( CircularQueue ) );
     if ( !p_sys->pp_stack )
     {
         free( p_sys->p_lock );
@@ -383,7 +389,7 @@ static int Open ( vlc_object_t * p_this )
         return VLC_EGENERIC;
     }
     for ( size_t i = 0; i < NB_CALLBACKS; i++ )
-       p_sys->pp_stack[i] = initFloatChain();
+       p_sys->pp_stack[i] = initCircularQueue(1);
     
 
     /*We add the callbacks*/
@@ -408,10 +414,9 @@ static int Open ( vlc_object_t * p_this )
         var_AddCallback( p_delay, p_nameVariable[i], updateChannelVal, p_sys );
         
         if ( !p_sys->b_distance )
-            addNullSamples( p_delay
-                            , i
-                            , milisecToNbSamp( p_sys->p_delayValues[i]
-                                               , p_sys->i_sampleRate ));
+        {
+            updateChannelBuf(p_delay, i, p_sys->p_delayValues[i] );
+        }
         free(p_nameVariable[i]);
     }
 
@@ -435,7 +440,7 @@ static void Close ( vlc_object_t* p_this )
     free( p_sys->p_delayValues );
     for( size_t i = 0; i < NB_CALLBACKS; i++ )
     {
-        destroyFloatChain( p_sys->pp_stack[i] );
+        destroyCircularQueue( p_sys->pp_stack[i] );
     }
     free( p_sys->pp_stack );
 
@@ -463,7 +468,7 @@ static block_t *Process ( filter_t * p_flt, block_t * p_in)
     {
         /*1*/
         memcpy( (float*)& f_danglingValue, spl, i_sizeFlot );
-        pushBack( p_sys->pp_stack[i_channelACT], f_danglingValue ); 
+        push( p_sys->pp_stack[i_channelACT], f_danglingValue ); 
 
         /*2*/
         f_danglingValue = pop( p_sys->pp_stack[i_channelACT] );
