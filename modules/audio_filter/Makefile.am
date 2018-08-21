@@ -1,5 +1,9 @@
 audio_filterdir = $(pluginsdir)/audio_filter
 
+libchandelay_plugin_la_SOURCES = audio_filter/chandelay/ChanDelay.c \
+							 audio_filter/chandelay/floatChain.h \
+							 audio_filter/chandelay/floatChain.c
+libchandelay_plugin_la_LIBADD = $(LIBM)
 libaudiobargraph_a_plugin_la_SOURCES = audio_filter/audiobargraph_a.c
 libaudiobargraph_a_plugin_la_LIBADD = $(LIBM)
 libchorus_flanger_plugin_la_SOURCES = audio_filter/chorus_flanger.c
@@ -35,6 +39,7 @@ libspatializer_plugin_la_SOURCES = \
 libspatializer_plugin_la_LIBADD = $(LIBM)
 
 audio_filter_LTLIBRARIES = \
+	libchandelay_plugin.la \
 	libaudiobargraph_a_plugin.la \
 	libchorus_flanger_plugin.la \
 	libcompressor_plugin.la \
