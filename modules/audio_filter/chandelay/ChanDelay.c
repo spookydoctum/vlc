@@ -45,24 +45,6 @@ static int Open( vlc_object_t * );
 static void Close( vlc_object_t * );
 static block_t  *Process ( filter_t *, block_t * );
 
-/*WHERE WE KEEP THE PARAMETERS*/
-typedef struct
-{
-    bool b_distance; /*is distance mode on?*/
-    bool b_fahrenheit; /*is the teperature in fahrenheit*/
-    float f_temperature; 
-    unsigned int i_nbChannel;
-    int i_sampleRate;
-    float* p_delayValues; /*the time we need to delay*/
-    CircularQueue** pp_stack; /* Where we keep the delayed values*/
-    vlc_mutex_t* p_lock; /*Mutex for the callbacks*/
-} filter_sys_t;
-
-/* We're using 500ms as the maximum delay time, as it can sync up speakers
- * About 125 meters apart (for a temperature of 35C).
- * Feel free to change that if you wish, the program will work the same*/
-#define MAX_TIME 500
-
 /* Module descriptor */
 vlc_module_begin()
     set_shortname(N_( "ChanDelay" ))
@@ -72,6 +54,10 @@ vlc_module_begin()
     set_subcategory( SUBCAT_AUDIO_AFILTER )
     set_callbacks( Open, Close )
 
+/* We're using 500ms as the maximum delay time, as it can sync up speakers
+ * About 125 meters apart (for a temperature of 35C).
+ * Feel free to change that if you wish, the program will work the same*/
+#define MAX_TIME 500
 /* The callbacks, I don't believe there's a way to dynamically allocate those
  * so I'm assming the max number of channels is 8
  * If you want/need to change this you'll need to copy-paste and change NB_CALLBACKS*/
@@ -103,6 +89,23 @@ vlc_module_begin()
 
 vlc_module_end ()
 
+/*WHERE WE KEEP THE PARAMETERS*/
+typedef struct
+{
+    bool b_distance; /*is distance mode on?*/
+    bool b_fahrenheit; /*is the teperature in fahrenheit*/
+    float f_temperature; 
+    unsigned int i_nbChannel;
+    int i_sampleRate;
+    float* p_delayValues; /*the time we need to delay*/
+    CircularQueue* p_stack[NB_CALLBACKS]; /* Where we keep the delayed values*/
+    vlc_mutex_t p_lock; /*Mutex for the callbacks*/
+} filter_sys_t;
+
+
+
+
+
 /* Helper functions 
  *
  *Self explanatory, gets us the number of samples in a specified time*/
@@ -129,7 +132,7 @@ static void addNullSamples( filter_t* p_this, int i_nbChannel, int nbSamp )
     {
         filter_sys_t* p_sys = p_this->p_sys;
         for( int i = 0; i < nbSamp; i++ )
-            push( p_sys->pp_stack[i_nbChannel], 0.f );
+            push( p_sys->p_stack[i_nbChannel], 0.f );
     }
     msg_Dbg(p_this, "%d silent samples added to channel %d", nbSamp, i_nbChannel );
 }
@@ -138,8 +141,8 @@ static void addNullSamples( filter_t* p_this, int i_nbChannel, int nbSamp )
 static void updateChannelBuf( filter_t* p_delay, int i_channelACT, float diffVal )
 {
     filter_sys_t* p_sys = p_delay->p_sys;
-    resizeCircularQueue( p_sys->pp_stack[i_channelACT]
-                         , p_sys->pp_stack[i_channelACT]->i_size 
+    resizeCircularQueue( p_sys->p_stack[i_channelACT]
+                         , p_sys->p_stack[i_channelACT]->i_size 
                            + milisecToNbSamp(diffVal, p_sys->i_sampleRate) );
 
     if ( diffVal > 0 ) /* If the value increased */
@@ -153,7 +156,7 @@ static void updateChannelBuf( filter_t* p_delay, int i_channelACT, float diffVal
     {
         int nbSamplesToPush = milisecToNbSamp(diffVal*-1, p_sys->i_sampleRate);
         for ( int smp = 0; smp < nbSamplesToPush; smp++ ) /* We take out as much */
-            pop( p_sys->pp_stack[i_channelACT] );                   /* as needed */
+            pop( p_sys->p_stack[i_channelACT] );                   /* as needed */
     }
 }
 
@@ -191,10 +194,11 @@ static void msModeInit( filter_t* p_this )
     filter_sys_t* p_sys = p_this->p_sys; 
 
     char** s_nameVariable = malloc( NB_CALLBACKS * sizeof(char*) );
+    //char* name = malloc( (strlen("delay-chan-X") + 1) * sizeof(char) );
     float big = 0;
     for( unsigned int i = 0; i < p_sys->i_nbChannel; i++ )
     {
-        char* name = malloc( (strlen("delay-chan-X") + 1) * sizeof(char) );
+       
         sprintf( s_nameVariable[i], "delay-chan-%d", i+1 );
         
         p_sys->p_delayValues[i] = var_GetFloat( p_this, s_nameVariable[i] );
@@ -202,8 +206,9 @@ static void msModeInit( filter_t* p_this )
         if ( p_sys->p_delayValues[i] > big )
             big = p_sys->p_delayValues[i];
 
-        free(name);
+        
     }
+    //free(name);
     free( s_nameVariable );
 
     for ( unsigned int i = 0; i < p_sys->i_nbChannel; i++ )
@@ -231,7 +236,7 @@ static int updateMode( vlc_object_t *p_this
     filter_t* p_delay = (filter_t *)p_this;
     filter_sys_t* p_sys = p_delay->p_sys;
 
-    vlc_mutex_lock( p_sys->p_lock );
+    vlc_mutex_lock( &p_sys->p_lock );
     p_sys->b_distance = newval.b_bool;
 
     if (p_sys->b_distance)
@@ -243,7 +248,7 @@ static int updateMode( vlc_object_t *p_this
         msModeInit( p_delay );
     }
 
-    vlc_mutex_unlock( p_sys->p_lock );
+    vlc_mutex_unlock( &p_sys->p_lock );
     return VLC_SUCCESS;
 }
 
@@ -266,13 +271,14 @@ static int updateChannelVal( vlc_object_t *p_this
     {
         if( psz_var[11] == (( char )( i + '0' ) ))
         {
-            vlc_mutex_lock( p_sys->p_lock );
+            vlc_mutex_lock( &p_sys->p_lock );
 
             float diffVal;
             if (p_sys->b_distance)
             {
                 p_sys->p_delayValues[i] = newval.f_float;
                 distanceModeInit( p_delay );
+                vlc_mutex_unlock( &p_sys->p_lock );
                 return VLC_SUCCESS;
             }
             else
@@ -282,7 +288,7 @@ static int updateChannelVal( vlc_object_t *p_this
             updateChannelBuf( p_delay, i, diffVal );
             p_sys->p_delayValues[i] = newval.f_float;
 
-            vlc_mutex_unlock( p_sys->p_lock );
+            vlc_mutex_unlock( &p_sys->p_lock );
             
             b_isDone = true;
         }
@@ -307,18 +313,16 @@ static int updateTemp( vlc_object_t *p_this
     filter_t* p_delay = (filter_t *)p_this;
     filter_sys_t* p_sys = p_delay->p_sys;
 
-    vlc_mutex_lock( p_sys->p_lock );
+    vlc_mutex_lock( &p_sys->p_lock );
     p_sys->f_temperature = newval.f_float;
 
     if (p_sys->b_distance)
         distanceModeInit( p_delay );
 
-    vlc_mutex_unlock( p_sys->p_lock );
+    vlc_mutex_unlock( &p_sys->p_lock );
 
     return VLC_SUCCESS;
 }
-
-//lol
 
 /* If we switched to a fahrenheit temperature */
 static int updateFah( vlc_object_t *p_this
@@ -334,13 +338,13 @@ static int updateFah( vlc_object_t *p_this
     filter_t* p_delay = (filter_t *)p_this;
     filter_sys_t* p_sys = p_delay->p_sys;
 
-    vlc_mutex_lock( p_sys->p_lock );
+    vlc_mutex_lock( &p_sys->p_lock );
     p_sys->b_fahrenheit = newval.b_bool;
 
     if (p_sys->b_distance)
         distanceModeInit( p_delay );
 
-    vlc_mutex_unlock( p_sys->p_lock );
+    vlc_mutex_unlock( &p_sys->p_lock );
 
     return VLC_SUCCESS;
 }
@@ -362,34 +366,18 @@ static int Open ( vlc_object_t * p_this )
 
     p_sys->i_nbChannel = aout_FormatNbChannels( &p_delay->fmt_in.audio );
     p_sys->i_sampleRate = p_delay->fmt_in.audio.i_rate;
-
-    p_sys->p_lock = malloc( sizeof(vlc_mutex_t) );
-    if ( !p_sys->p_lock )
-    {
-        free( p_sys );
-        return VLC_EGENERIC;
-    }
-    vlc_mutex_init( p_sys->p_lock );
+    vlc_mutex_init( &p_sys->p_lock );
 
     p_sys->p_delayValues = malloc( NB_CALLBACKS * sizeof(float) );
     if ( !p_sys->p_delayValues )
     {
-        free( p_sys->p_lock );
         free( p_sys );
         return VLC_EGENERIC;
     }
 
     /*Init Sample Buffer Initialisation*/
-    p_sys->pp_stack = malloc( NB_CALLBACKS * sizeof( CircularQueue ) );
-    if ( !p_sys->pp_stack )
-    {
-        free( p_sys->p_lock );
-        free( p_sys->p_delayValues );
-        free( p_sys );
-        return VLC_EGENERIC;
-    }
     for ( size_t i = 0; i < NB_CALLBACKS; i++ )
-       p_sys->pp_stack[i] = initCircularQueue(1);
+       p_sys->p_stack[i] = initCircularQueue(1);
     
 
     /*We add the callbacks*/
@@ -440,12 +428,10 @@ static void Close ( vlc_object_t* p_this )
     free( p_sys->p_delayValues );
     for( size_t i = 0; i < NB_CALLBACKS; i++ )
     {
-        destroyCircularQueue( p_sys->pp_stack[i] );
+        destroyCircularQueue( p_sys->p_stack[i] );
     }
-    free( p_sys->pp_stack );
 
-    vlc_mutex_destroy( p_sys->p_lock );
-    free( p_sys->p_lock );
+    vlc_mutex_destroy( &p_sys->p_lock );
     free( p_delay->p_sys );
 }
 
@@ -456,27 +442,24 @@ static block_t *Process ( filter_t * p_flt, block_t * p_in)
 
     unsigned int i_channelACT = 0;
     float f_danglingValue = 0;
-    int i_sizeFlot = sizeof(float);
 
     /*For each sample in the block...
     * 1. Add it to the Queue/Buffer
     * 2. Replace it's value by the first one in the Queue*/
     float *spl = (float *)p_in->p_buffer;
-    for( unsigned int smp = (p_in->i_nb_samples * p_sys->i_nbChannel);
-             smp > 0;
-             smp-- )
+    for( unsigned int i = (p_in->i_nb_samples * p_sys->i_nbChannel);
+             i > 0;
+             i-- )
     {
         /*1*/
-        memcpy( (float*)& f_danglingValue, spl, i_sizeFlot );
-        push( p_sys->pp_stack[i_channelACT], f_danglingValue ); 
+        f_danglingValue = *spl;
+        push( p_sys->p_stack[i_channelACT], f_danglingValue ); 
 
         /*2*/
-        f_danglingValue = pop( p_sys->pp_stack[i_channelACT] );
-        memcpy( spl, & f_danglingValue, i_sizeFlot );
+        f_danglingValue = pop( p_sys->p_stack[i_channelACT] );
+        *spl = f_danglingValue;
 
-        i_channelACT++;
-        if (i_channelACT >= p_sys->i_nbChannel)
-            i_channelACT = 0;
+        i_channelACT = ( i_channelACT + 1 ) % p_sys->i_nbChannel;
         spl++;
     }
 

@@ -36,6 +36,7 @@ typedef struct CircularQueue
 CircularQueue* initCircularQueue( unsigned int );
 void destroyCircularQueue( CircularQueue* );
 void resizeCircularQueue( CircularQueue*, unsigned int );
+
 void push( CircularQueue*, float );
 float pop( CircularQueue* );
 
