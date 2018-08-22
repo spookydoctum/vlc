@@ -28,8 +28,8 @@
 typedef struct CircularQueue
 {
     unsigned int i_size;
-    float* p_head;
-    float* p_tail;
+    unsigned int i_head;
+    unsigned int i_tail;
     float* p_array;
 } CircularQueue;
 

@@ -36,8 +36,8 @@ CircularQueue* initCircularQueue( unsigned int i_size )
 
         p_this->i_size = i_size;
 
-        p_this->p_head = p_this->p_array;
-        p_this->p_tail = p_this->p_array;
+        p_this->i_head = 0;
+        p_this->i_tail = 0;
     }
     return p_this;
 }
@@ -62,8 +62,8 @@ void resizeCircularQueue( CircularQueue* p_this, unsigned int i_nuSize )
         free( p_this->p_array );
 
         p_this->p_array = p_nuQueue;
-        p_this->p_head = p_nuQueue;
-        p_this->p_tail = p_nuQueue;
+        p_this->i_head %= i_nuSize;
+        p_this->i_tail %= i_nuSize;
         p_this->i_size = i_nuSize;
     }
     else
@@ -74,21 +74,16 @@ void resizeCircularQueue( CircularQueue* p_this, unsigned int i_nuSize )
 
 void push( CircularQueue* p_this, float i_inp )
 {
-    *p_this->p_head = i_inp;
+    p_this->p_array[p_this->i_head] = i_inp;
 
-    if( p_this->p_head == (p_this->p_array + ( p_this->i_size - 1 ) ) )
-        p_this->p_head = p_this->p_array;
-    else
-        p_this->p_head++;
+    p_this->i_head = ( p_this->i_head + 1 ) % ( p_this->i_size );
 }
 
 float pop( CircularQueue* p_this )
 {
-    float f_temp = *p_this->p_tail;
-    if( p_this->p_tail == (p_this->p_array + ( p_this->i_size - 1 ) ) )
-        p_this->p_tail = p_this->p_array;
-    else
-        p_this->p_tail++;
+    float f_temp = p_this->p_array[p_this->i_tail];
+
+    p_this->i_tail = ( p_this->i_tail + 1 ) % ( p_this->i_size );
 
     return f_temp;
 }
