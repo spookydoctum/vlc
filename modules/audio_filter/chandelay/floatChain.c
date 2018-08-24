@@ -44,7 +44,7 @@ CircularQueue* initCircularQueue( unsigned int i_size )
 
 /* Destroyer */
 void destroyCircularQueue( CircularQueue* p_this )
-{
+{ 
     free( p_this->p_array );
     free( p_this );
 }

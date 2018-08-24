@@ -26,6 +26,9 @@ Codecs:
  * Support for SMPTE-TT image profile
  * Support for 16-bit greyscale
 
+Audio filters:
+ * Add straight delay audio filter
+ 
 Access:
  * Enable SMB2 / SMB3 support on mobile ports with libsmb2
 

@@ -61,7 +61,7 @@ vlc_module_begin()
 /* The callbacks, I don't believe there's a way to dynamically allocate those
  * so I'm assming the max number of channels is 8
  * If you want/need to change this you'll need to copy-paste and change NB_CALLBACKS*/
-#define NB_CALLBACKS 8
+#define NB_CALLBACKS 9
     add_float_with_range( "delay-chan-1", 0,0,MAX_TIME, "Delay Channel 1",
         N_( "Time in milliseconds of the sound delay on this channel" ), true )
     add_float_with_range( "delay-chan-2", 0,0,MAX_TIME, "Delay Channel 2",
@@ -77,6 +77,8 @@ vlc_module_begin()
     add_float_with_range( "delay-chan-7", 0,0,MAX_TIME, "Delay Channel 7",
         N_( "Time in milliseconds of the sound delay on this channel" ), true )
     add_float_with_range( "delay-chan-8", 0,0,MAX_TIME, "Delay Channel 8",
+        N_( "Time in milliseconds of the sound delay on this channel" ), true )
+    add_float_with_range( "delay-chan-9", 0,0,MAX_TIME, "Delay Channel 9",
         N_( "Time in milliseconds of the sound delay on this channel" ), true )
 
     add_bool( "mode-distance", false, N_( "Use distance" ),
