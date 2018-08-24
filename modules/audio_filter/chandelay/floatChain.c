@@ -51,16 +51,9 @@ void destroyCircularQueue( CircularQueue* p_this )
 
 void resizeCircularQueue( CircularQueue* p_this, unsigned int i_nuSize )
 {
-    float* p_nuQueue = malloc( sizeof(float) * i_nuSize);
+    float* p_nuQueue = realloc( p_this->p_array, sizeof(float) * i_nuSize);
     if ( p_nuQueue )
     {
-        if ( p_this->i_size < i_nuSize)
-            memcpy( p_nuQueue, p_this->p_array, ( p_this->i_size ) * sizeof(float) );
-        else
-            memcpy( p_nuQueue, p_this->p_array, ( i_nuSize ) * sizeof(float) );
-
-        free( p_this->p_array );
-
         p_this->p_array = p_nuQueue;
         p_this->i_head %= i_nuSize;
         p_this->i_tail %= i_nuSize;

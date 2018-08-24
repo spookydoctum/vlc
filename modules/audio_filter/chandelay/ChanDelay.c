@@ -99,7 +99,7 @@ typedef struct
     float f_temperature; 
     unsigned int i_nbChannel;
     int i_sampleRate;
-    float* p_delayValues; /*the time we need to delay*/
+    float p_delayValues[NB_CALLBACKS]; /*the time we need to delay*/
     CircularQueue* p_stack[NB_CALLBACKS]; /* Where we keep the delayed values*/
     vlc_mutex_t p_lock; /*Mutex for the callbacks*/
 } filter_sys_t;
@@ -195,23 +195,21 @@ static void msModeInit( filter_t* p_this )
 {
     filter_sys_t* p_sys = p_this->p_sys; 
 
-    char** s_nameVariable = malloc( NB_CALLBACKS * sizeof(char*) );
+    char** p_nameVariable = malloc( NB_CALLBACKS * sizeof(char*) );
     //char* name = malloc( (strlen("delay-chan-X") + 1) * sizeof(char) );
     float big = 0;
     for( unsigned int i = 0; i < p_sys->i_nbChannel; i++ )
     {
-       
-        sprintf( s_nameVariable[i], "delay-chan-%d", i+1 );
-        
-        p_sys->p_delayValues[i] = var_GetFloat( p_this, s_nameVariable[i] );
+        if ( asprintf( &p_nameVariable[i], "delay-chan-%d", i + 1 ) == -1 )
+            p_sys->p_delayValues[i] = var_GetFloat( p_this, p_nameVariable[i] );
 
         if ( p_sys->p_delayValues[i] > big )
             big = p_sys->p_delayValues[i];
 
-        
+        free(p_nameVariable[i]);
     }
     //free(name);
-    free( s_nameVariable );
+    free( p_nameVariable );
 
     for ( unsigned int i = 0; i < p_sys->i_nbChannel; i++ )
     {
@@ -370,13 +368,6 @@ static int Open ( vlc_object_t * p_this )
     p_sys->i_sampleRate = p_delay->fmt_in.audio.i_rate;
     vlc_mutex_init( &p_sys->p_lock );
 
-    p_sys->p_delayValues = malloc( NB_CALLBACKS * sizeof(float) );
-    if ( !p_sys->p_delayValues )
-    {
-        free( p_sys );
-        return VLC_EGENERIC;
-    }
-
     /*Init Sample Buffer Initialisation*/
     for ( size_t i = 0; i < NB_CALLBACKS; i++ )
        p_sys->p_stack[i] = initCircularQueue(1);
@@ -427,7 +418,6 @@ static void Close ( vlc_object_t* p_this )
     filter_t* p_delay = (filter_t *) p_this;
     filter_sys_t* p_sys = p_delay->p_sys;
 
-    free( p_sys->p_delayValues );
     for( size_t i = 0; i < NB_CALLBACKS; i++ )
     {
         destroyCircularQueue( p_sys->p_stack[i] );
